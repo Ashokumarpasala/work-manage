@@ -5,7 +5,6 @@ import { Link } from "react-router";
 function VisitedVehiclesModule() {
 	const [customers, setCustomers] = useState([]);
 	const [searchTerm, setSearchTerm] = useState("");
-	console.log(customers);
 
 	useEffect(() => {
 		const savedCustomers =
@@ -70,31 +69,36 @@ function VisitedVehiclesModule() {
 								) : (
 									<ul className="list-group">
 										{filteredCustomers.map((customer) => (
-											<>
-												<li
-													key={customer.id}
-													className="list-group-item d-flex justify-content-between align-items-center"
+											<li
+												key={customer.id}
+												className="list-group-item d-flex justify-content-between align-items-center"
+											>
+												<Link
+													to="/singlecustomer"
 													onClick={() =>
 														localStorage.setItem(
 															"SELECTED_CUSTOMER",
 															JSON.stringify(customer)
 														)
 													}
+													className="text-decoration-none text-dark flex-grow-1"
 												>
-													<Link to="/singlecustomer">
-														<div>
-															<strong>{customer.customerName}</strong> -{" "}
-															{customer.vehicleNumber}
-														</div>
-													</Link>
-													<button
-														className="btn btn-danger btn-sm"
-														onClick={() => handleDelete(customer.id)}
-													>
-														Delete
-													</button>
-												</li>
-											</>
+													<div>
+														<strong>{customer.customerName}</strong> -{" "}
+														{customer.vehicleNumber}
+													</div>
+												</Link>
+
+												<button
+													className="btn btn-danger btn-sm"
+													onClick={(e) => {
+														e.stopPropagation(); // prevent navigation when deleting
+														handleDelete(customer.id);
+													}}
+												>
+													Delete
+												</button>
+											</li>
 										))}
 									</ul>
 								)}
