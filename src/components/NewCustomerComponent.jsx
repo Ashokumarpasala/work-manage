@@ -6,12 +6,7 @@ import { addCustomer } from "./CustomerList";
 import { Link, useNavigate } from "react-router";
 
 function NewCustomerComponent() {
-	useEffect(() => {
-		const savedCustomers =
-			JSON.parse(localStorage.getItem("CUSTOMER_LIST")) || [];
-		console.log("All Customers:", savedCustomers);
-	}, []);
-
+	// ----- Service schedules (unchanged) -----
 	const carServiceSchedules = [
 		{ label: "1st Free Service - 1k km / 1 month", cost: 0 },
 		{ label: "2nd Free Service - 5k km / 0.5 Year", cost: 0 },
@@ -27,6 +22,7 @@ function NewCustomerComponent() {
 		{ label: "100k PMS / 10 Years", cost: 4200 },
 	];
 
+	// ----- Form state (your original) -----
 	const [selectedServiceIndex, setSelectedServiceIndex] = useState(null);
 	const [washing, setWashing] = useState("No");
 	const [interior, setInterior] = useState("No");
@@ -35,86 +31,163 @@ function NewCustomerComponent() {
 	const [customerName, setCustomerName] = useState("");
 	const [vehicleNumber, setVehicleNumber] = useState("");
 	const [carImages, setCarImages] = useState([]);
-	const [customerConcerns, setCustomerConcerns] = useState(""); // ✅ new state
+	const [customerConcerns, setCustomerConcerns] = useState("");
 
-	// new states for custom part
+	// custom part
 	const [customPartName, setCustomPartName] = useState("");
 	const [customPartCost, setCustomPartCost] = useState("");
 	const [partsOptions, setPartsOptions] = useState(additionalPartsList);
 
+	// ----- Edit mode additions -----
+	const [editMode, setEditMode] = useState(false);
+	const [editCustomerId, setEditCustomerId] = useState(null);
+	const [initialServiceCost, setInitialServiceCost] = useState(0); // used when service not changed during edit
+	const [originalCreatedAt, setOriginalCreatedAt] = useState(null);
+
 	const navigate = useNavigate();
 
+	// debug (your original)
+	useEffect(() => {
+		const savedCustomers =
+			JSON.parse(localStorage.getItem("CUSTOMER_LIST")) || [];
+		console.log("All Customers:", savedCustomers);
+	}, []);
+
+	// ----- Load edit data if present -----
+	useEffect(() => {
+		const editCustomer = JSON.parse(localStorage.getItem("EDIT_CUSTOMER"));
+		if (editCustomer) {
+			setEditMode(true);
+			setEditCustomerId(editCustomer.id);
+
+			setCustomerName(editCustomer.customerName || "");
+			setVehicleNumber(editCustomer.vehicleNumber || "");
+			setCustomerConcerns(editCustomer.customerConcerns || "");
+			setWashing(editCustomer.washing || "No");
+			setInterior(editCustomer.interior || "No");
+			setTeflon(editCustomer.teflon || "No");
+			setCarImages(
+				Array.isArray(editCustomer.carImages) ? editCustomer.carImages : []
+			);
+			setSelectedParts(
+				Array.isArray(editCustomer.selectedParts)
+					? editCustomer.selectedParts
+					: []
+			);
+			setOriginalCreatedAt(editCustomer.createdAt || new Date().toISOString());
+
+			// figure out service index from label
+			const idx = carServiceSchedules.findIndex(
+				(s) => s.label === editCustomer.selectedService
+			);
+			setSelectedServiceIndex(idx !== -1 ? idx : null);
+
+			// Use the stored serviceCost when user hasn't changed dropdown
+			setInitialServiceCost(
+				typeof editCustomer.serviceCost === "number"
+					? editCustomer.serviceCost
+					: 0
+			);
+
+			// Ensure any previously selected custom parts are in options so react-select can display them
+			const merged = [...additionalPartsList];
+			(editCustomer.selectedParts || []).forEach((p) => {
+				if (!merged.some((opt) => opt.label === p.label)) {
+					merged.push({ label: p.label, cost: Number(p.cost) || 0 });
+				}
+			});
+			setPartsOptions(merged);
+		}
+	}, []);
+
+	// ----- Costs (your logic kept; serviceCost respects edit initial cost) -----
 	const washingCost = washing === "Yes" ? 300 : 0;
 	const interiorCost = interior === "Yes" ? 1000 : 0;
 	const teflonCost = teflon === "Yes" ? 2000 : 0;
 	const serviceCost =
 		selectedServiceIndex !== null
 			? carServiceSchedules[selectedServiceIndex].cost
-			: 0;
+			: initialServiceCost;
 	const pickupCost = 300;
 	const selectedPartsCost = selectedParts.reduce(
-		(total, item) => total + item.cost,
+		(total, item) => total + (Number(item.cost) || 0),
 		0
 	);
-	const totalCost =
-		serviceCost +
-		pickupCost +
-		washingCost +
-		interiorCost +
-		teflonCost +
-		selectedPartsCost;
+	const additionalCost =
+		pickupCost + washingCost + interiorCost + teflonCost + selectedPartsCost;
+	const totalCost = serviceCost + additionalCost;
 
+	// ----- Image handling (your original) -----
 	const handleImageChange = (e) => {
 		const files = Array.from(e.target.files);
-		const readers = files.map((file) => {
-			return new Promise((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onloadend = () => resolve(reader.result);
-				reader.onerror = reject;
-				reader.readAsDataURL(file);
-			});
-		});
+		const readers = files.map(
+			(file) =>
+				new Promise((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onloadend = () => resolve(reader.result);
+					reader.onerror = reject;
+					reader.readAsDataURL(file);
+				})
+		);
 
 		Promise.all(readers).then((images) => {
 			setCarImages(images);
 		});
 	};
 
+	// ----- Save (add or update) -----
 	const handleSave = (e) => {
 		e.preventDefault();
-		const newCustomer = {
-			id: Date.now(),
+
+		const payload = {
+			id: editMode ? editCustomerId : Date.now(),
 			customerName,
 			vehicleNumber,
 			selectedService:
 				selectedServiceIndex !== null
 					? carServiceSchedules[selectedServiceIndex].label
 					: null,
+			serviceCost,
+			additionalCost,
+			totalCost: serviceCost + additionalCost,
 			washing,
 			interior,
 			teflon,
 			selectedParts,
 			carImages,
-			customerConcerns, // ✅ added here
-			totalCost,
-			createdAt: new Date().toISOString(),
+			customerConcerns,
+			createdAt: editMode ? originalCreatedAt : new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
 		};
-		addCustomer(newCustomer);
-		alert("Customer saved successfully!");
-		navigate("/"); // ✅ redirect to main page
+
+		if (editMode) {
+			// Update existing record
+			let customers = JSON.parse(localStorage.getItem("CUSTOMER_LIST")) || [];
+			customers = customers.map((c) => (c.id === editCustomerId ? payload : c));
+			localStorage.setItem("CUSTOMER_LIST", JSON.stringify(customers));
+			localStorage.removeItem("EDIT_CUSTOMER");
+			alert("Customer updated successfully!");
+		} else {
+			// Add new record (your original)
+			addCustomer(payload);
+			alert("Customer saved successfully!");
+		}
+
+		navigate("/customersList"); // back to dashboard/list
 	};
 
-	// add custom part to dropdown
+	// ----- Add custom part (your original) -----
 	const handleAddCustomPart = () => {
 		if (customPartName.trim() === "" || customPartCost === "") {
 			alert("Please enter both part name and cost");
 			return;
 		}
-		const newPart = {
-			label: customPartName,
-			cost: Number(customPartCost),
-		};
+		const newPart = { label: customPartName, cost: Number(customPartCost) };
 		setPartsOptions((prev) => [...prev, newPart]);
+
+		// If the user adds a part, auto-select it for convenience
+		setSelectedParts((prev) => [...prev, newPart]);
+
 		setCustomPartName("");
 		setCustomPartCost("");
 		alert("Part added successfully!");
@@ -123,199 +196,242 @@ function NewCustomerComponent() {
 	return (
 		<div>
 			<Navbar />
-			<div className="container-lg p-5">
+			<div className="container p-3 p-md-5">
+				{/* Header */}
 				<div className="row align-items-center mb-4">
-					<div className="col-md-6">
-						<h1 className="fw-bold">Create New Customer</h1>
+					<div className="col-12 col-md-6 mb-2 mb-md-0">
+						<h2 className="fw-bold text-center text-md-start">
+							{editMode ? "Edit Customer" : "Create New Customer"}
+						</h2>
 					</div>
-					<div className="col-md-6 text-md-end">
+					<div className="col-12 col-md-6 text-center text-md-end">
 						<Link to="/">
-							<button className="btn btn-primary px-4">
+							<button className="btn btn-primary w-100 w-md-auto">
 								Back To Dashboard
 							</button>
 						</Link>
 					</div>
 				</div>
-				<div className="grid">
-					<div className=" p-3 shadow m-3">
-						<img
-							src="https://media.istockphoto.com/id/1144385888/vector/happy-successful-man-is-standing-next-to-a-yellow-car-on-a-background-vector-illustration-in.jpg?s=612x612&w=0&k=20&c=TkDUuDoWVGfxKbazgWJHMGu3h29XWU6BdIVVWkg7GfY="
-							alt=""
-						/>
+
+				<div className="row">
+					{/* Image Section (unchanged) */}
+					<div className="col-12 col-lg-4 mb-3">
+						<div className="p-3 shadow rounded bg-white">
+							<img
+								src="https://media.istockphoto.com/id/1144385888/vector/happy-successful-man-is-standing-next-to-a-yellow-car-on-a-background-vector-illustration-in.jpg?s=612x612&w=0&k=20&c=TkDUuDoWVGfxKbazgWJHMGu3h29XWU6BdIVVWkg7GfY="
+								alt="car"
+								className="img-fluid rounded"
+							/>
+						</div>
 					</div>
 
-					<div className="card p-3 shadow m-3">
-						<h1 className="text-shadow">New Customer Component</h1>
-						<hr />
-						<form onSubmit={handleSave}>
-							<div className="col pt-3">
-								<h3>Customer Name</h3>
-								<input
-									className="form-control"
-									value={customerName}
-									onChange={(e) => setCustomerName(e.target.value)}
-									placeholder="Enter the Customer Name"
-									required
-								/>
-							</div>
-							<div className="col pt-3">
-								<h3>Vehicle Number</h3>
-								<input
-									className="form-control"
-									value={vehicleNumber}
-									onChange={(e) => setVehicleNumber(e.target.value)}
-									placeholder="Enter the Vehicle Number"
-									required
-								/>
-							</div>
-							<div className="col pt-3">
-								<h3>Service Type</h3>
-								<select
-									className="form-select"
-									onChange={(e) =>
-										setSelectedServiceIndex(Number(e.target.value))
-									}
-									defaultValue=""
-								>
-									<option disabled value="">
-										-- Select Service --
-									</option>
-									{carServiceSchedules.map((schedule, index) => (
-										<option key={index} value={index}>
-											{schedule.label}
-										</option>
-									))}
-								</select>
-							</div>
-							<div className="col pt-3">
-								<h3>Washing</h3>
-								<select
-									className="form-select"
-									value={washing}
-									onChange={(e) => setWashing(e.target.value)}
-								>
-									<option value="Yes">Yes</option>
-									<option value="No">No</option>
-								</select>
-							</div>
-							<div className="col pt-3">
-								<h3>Interior Cleaning</h3>
-								<select
-									className="form-select"
-									value={interior}
-									onChange={(e) => setInterior(e.target.value)}
-								>
-									<option value="Yes">Yes</option>
-									<option value="No">No</option>
-								</select>
-							</div>
-							<div className="col pt-3">
-								<h3>Teflon Coating</h3>
-								<select
-									className="form-select"
-									value={teflon}
-									onChange={(e) => setTeflon(e.target.value)}
-								>
-									<option value="Yes">Yes</option>
-									<option value="No">No</option>
-								</select>
-							</div>
-
-							{/* Custom Part Input Section */}
-							<div className="col pt-3">
-								<h3>Add Custom Part</h3>
-								<div className="d-flex gap-2">
+					{/* Form Section */}
+					<div className="col-12 col-lg-8">
+						<div className="card p-3 shadow">
+							<h4 className="mb-3">Customer Details</h4>
+							<hr />
+							<form onSubmit={handleSave}>
+								<div className="mb-3">
+									<label className="form-label">Customer Name</label>
 									<input
-										type="text"
 										className="form-control"
-										placeholder="Part Name"
-										value={customPartName}
-										onChange={(e) => setCustomPartName(e.target.value)}
+										value={customerName}
+										onChange={(e) => setCustomerName(e.target.value)}
+										placeholder="Enter Customer Name"
+										required
 									/>
+								</div>
+								<div className="mb-3">
+									<label className="form-label">Vehicle Number</label>
 									<input
-										type="number"
 										className="form-control"
-										placeholder="Cost"
-										value={customPartCost}
-										onChange={(e) => setCustomPartCost(e.target.value)}
+										value={vehicleNumber}
+										onChange={(e) => setVehicleNumber(e.target.value)}
+										placeholder="Enter Vehicle Number"
+										required
 									/>
-									<button
-										type="button"
-										className="btn btn-success"
-										onClick={handleAddCustomPart}
+								</div>
+								<div className="mb-3">
+									<label className="form-label">Service Type</label>
+									<select
+										className="form-select"
+										value={
+											selectedServiceIndex !== null ? selectedServiceIndex : ""
+										}
+										onChange={(e) => {
+											const idx =
+												e.target.value === "" ? null : Number(e.target.value);
+											setSelectedServiceIndex(idx);
+										}}
 									>
-										Add
-									</button>
+										<option disabled value="">
+											-- Select Service --
+										</option>
+										{carServiceSchedules.map((schedule, index) => (
+											<option key={index} value={index}>
+												{schedule.label}
+											</option>
+										))}
+									</select>
 								</div>
-							</div>
 
-							<div className="col pt-3">
-								<h3>Additional Approvals (Search & Select Multiple)</h3>
-								<Select
-									options={partsOptions}
-									isMulti
-									onChange={(selected) => setSelectedParts(selected || [])}
-									placeholder="Search and select parts..."
-								/>
-							</div>
-
-							<div className="col-12">
-								<h4>Upload Car Images</h4>
-								<input
-									type="file"
-									className="form-control"
-									multiple
-									accept="image/*"
-									onChange={handleImageChange}
-								/>
-								<div className="d-flex flex-wrap mt-3">
-									{carImages.map((img, index) => (
-										<img
-											key={index}
-											src={img}
-											alt={`img-${index}`}
-											className="me-2 mb-2"
-											style={{
-												width: "100px",
-												height: "100px",
-												objectFit: "cover",
-												borderRadius: "8px",
-											}}
-										/>
-									))}
+								{/* Options */}
+								<div className="row">
+									<div className="col-12 col-sm-4 mb-3">
+										<label className="form-label">Washing</label>
+										<select
+											className="form-select"
+											value={washing}
+											onChange={(e) => setWashing(e.target.value)}
+										>
+											<option value="Yes">Yes</option>
+											<option value="No">No</option>
+										</select>
+									</div>
+									<div className="col-12 col-sm-4 mb-3">
+										<label className="form-label">Interior Cleaning</label>
+										<select
+											className="form-select"
+											value={interior}
+											onChange={(e) => setInterior(e.target.value)}
+										>
+											<option value="Yes">Yes</option>
+											<option value="No">No</option>
+										</select>
+									</div>
+									<div className="col-12 col-sm-4 mb-3">
+										<label className="form-label">Teflon Coating</label>
+										<select
+											className="form-select"
+											value={teflon}
+											onChange={(e) => setTeflon(e.target.value)}
+										>
+											<option value="Yes">Yes</option>
+											<option value="No">No</option>
+										</select>
+									</div>
 								</div>
-							</div>
 
-							{/* Customer Concerns Section */}
-							<div className="col pt-3">
-								<h3>Customer Concerns</h3>
-								<textarea
-									className="form-control"
-									placeholder="Enter customer concerns or issues with the vehicle..."
-									rows="4"
-									value={customerConcerns}
-									onChange={(e) => setCustomerConcerns(e.target.value)}
-								/>
-							</div>
+								{/* Custom Part */}
+								<div className="mb-3">
+									<label className="form-label">Add Custom Part</label>
+									<div className="row g-2">
+										<div className="col-12 col-md-4">
+											<input
+												type="text"
+												className="form-control"
+												placeholder="Part Name"
+												value={customPartName}
+												onChange={(e) => setCustomPartName(e.target.value)}
+											/>
+										</div>
+										<div className="col-12 col-md-4">
+											<input
+												type="number"
+												className="form-control"
+												placeholder="Cost"
+												value={customPartCost}
+												onChange={(e) => setCustomPartCost(e.target.value)}
+											/>
+										</div>
+										<div className="col-12 col-md-4 d-grid">
+											<button
+												type="button"
+												className="btn btn-success"
+												onClick={handleAddCustomPart}
+											>
+												Add
+											</button>
+										</div>
+									</div>
+								</div>
 
-							<button
-								type="submit"
-								className="btn btn-primary mt-3 form-control fs-4"
-							>
-								Save
-							</button>
-						</form>
-						<div className="col pt-3">
-							<h3>Estimation</h3>
-							<ul>
-								<li>Service: ₹{serviceCost}</li>
-								<li>Pick-up: ₹{pickupCost}</li>
-								<li>Washing: ₹{washingCost}</li>
-								<li>Interior Cleaning: ₹{interiorCost}</li>
-								<li>Teflon Coating: ₹{teflonCost}</li>
-								<li>Additional Parts: ₹{selectedPartsCost}</li>
-							</ul>
-							<h3>Total Estimated Cost: ₹{totalCost}</h3>
+								{/* Parts Multi Select */}
+								<div className="mb-3">
+									<label className="form-label">
+										Additional Approvals (Search & Select Multiple)
+									</label>
+									<Select
+										options={partsOptions}
+										isMulti
+										value={selectedParts}
+										onChange={(selected) => setSelectedParts(selected || [])}
+										placeholder="Search and select parts..."
+										// Ensure stable matching by label so edited items show up correctly
+										getOptionLabel={(o) => o.label}
+										getOptionValue={(o) => String(o.label)}
+									/>
+								</div>
+
+								{/* Images */}
+								<div className="mb-3">
+									<label className="form-label">Upload Car Images</label>
+									<input
+										type="file"
+										className="form-control"
+										multiple
+										accept="image/*"
+										onChange={handleImageChange}
+									/>
+									<div className="d-flex flex-wrap mt-3 gap-2">
+										{carImages.map((img, index) => (
+											<img
+												key={index}
+												src={img}
+												alt={`img-${index}`}
+												className="rounded"
+												style={{
+													width: "100px",
+													height: "100px",
+													objectFit: "cover",
+												}}
+											/>
+										))}
+									</div>
+								</div>
+
+								{/* Concerns */}
+								<div className="mb-3">
+									<label className="form-label">Customer Concerns</label>
+									<textarea
+										className="form-control"
+										placeholder="Enter customer concerns..."
+										rows="3"
+										value={customerConcerns}
+										onChange={(e) => setCustomerConcerns(e.target.value)}
+									/>
+								</div>
+
+								{/* Save */}
+								<button
+									type="submit"
+									className="btn btn-primary w-100 fs-5 mt-2"
+								>
+									{editMode ? "Update Customer" : "Save"}
+								</button>
+							</form>
+
+							{/* Estimation (unchanged) */}
+							<div className="mt-4">
+								<h5>Estimation</h5>
+								<ul className="list-unstyled">
+									<li>Service Cost: ₹{serviceCost}</li>
+									<li>Pick-up: ₹{pickupCost}</li>
+									<li>Washing: ₹{washingCost}</li>
+									<li>Interior Cleaning: ₹{interiorCost}</li>
+									<li>Teflon Coating: ₹{teflonCost}</li>
+									<li>Additional Parts: ₹{selectedPartsCost}</li>
+								</ul>
+								<h6>
+									Other Charges: ₹
+									{pickupCost +
+										washingCost +
+										interiorCost +
+										teflonCost +
+										selectedPartsCost}
+								</h6>
+								<h5 className="fw-bold">Grand Total: ₹{totalCost}</h5>
+							</div>
 						</div>
 					</div>
 				</div>
