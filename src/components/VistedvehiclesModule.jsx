@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 function VisitedVehiclesModule() {
 	const [customers, setCustomers] = useState([]);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [fromDate, setFromDate] = useState("");
 	const [toDate, setToDate] = useState("");
+	const navigate = useNavigate();
 
 	useEffect(() => {
 		const savedCustomers =
@@ -154,8 +155,7 @@ function VisitedVehiclesModule() {
 												key={customer.id}
 												className="list-group-item d-flex justify-content-between align-items-center"
 											>
-												<Link
-													to="/singlecustomer"
+												<div
 													onClick={() =>
 														localStorage.setItem(
 															"SELECTED_CUSTOMER",
@@ -164,7 +164,7 @@ function VisitedVehiclesModule() {
 													}
 													className="text-decoration-none text-dark flex-grow-1"
 												>
-													<div>
+													<div onClick={() => navigate("/singlecustomer")}>
 														<strong>
 															{customer.customerName.toUpperCase()}
 														</strong>{" "}
@@ -177,7 +177,7 @@ function VisitedVehiclesModule() {
 															).toLocaleDateString()}
 														</small>
 													</div>
-												</Link>
+												</div>
 
 												<Link
 													to="/newcustomer"
