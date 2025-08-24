@@ -126,6 +126,7 @@ function NewCustomerComponent() {
 	}, [formData, initialServiceCost]);
 
 	// ----- Image handling -----
+	// ----- Image handling -----
 	const handleImageChange = useCallback((e) => {
 		const files = Array.from(e.target.files);
 		const readers = files.map(
@@ -139,7 +140,10 @@ function NewCustomerComponent() {
 		);
 
 		Promise.all(readers).then((images) => {
-			setFormData((prev) => ({ ...prev, carImages: images }));
+			setFormData((prev) => ({
+				...prev,
+				carImages: [...prev.carImages, ...images], // ✅ append instead of replace
+			}));
 		});
 	}, []);
 
